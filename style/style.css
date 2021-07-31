@@ -35,3 +35,13 @@ a{
     width: 5%;
 }
 
+@media only screen and (max-width:414){
+    .content {
+        width: 100%;
+    }
+
+    .social img{
+        width: 10%;
+    }
+}
+
