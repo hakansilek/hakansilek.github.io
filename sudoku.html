@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-R">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Oyunu</title>
+    <!-- Tailwind CSS CDN'i -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Hücrelerin stillendirilmesi */
+        .cell {
+            width: 100%;
+            height: 100%;
+            aspect-ratio: 1 / 1; /* Hücreleri kare yapar */
+            padding: 0;
+            text-align: center;
+            font-size: 1.5rem; /* 24px */
+            line-height: 2rem; /* 32px */
+            border: 1px solid #d1d5db; /* gray-300 - Hücre sınırı inceltildi */
+            background-color: white;
+            color: #1e40af; /* blue-800 */
+            transition: all 0.1s ease-in-out;
+        }
+        
+        /* Odaklanıldığında varsayılan dış çizgiyi kaldırır */
+        .cell:focus {
+            outline: 2px solid #3b82f6; /* blue-500 */
+            z-index: 10;
+            position: relative;
+        }
+
+        /* Sadece okunabilir hücreler (ipuçları) */
+        .cell[readonly] {
+            background-color: white; /* Referans resimdeki gibi arka plan beyaz */
+            color: #111827; /* gray-900 - Kalın siyah/koyu gri */
+            font-weight: 700; /* bold */
+        }
+
+        /* 3x3 kutuların sınırlarını belirginleştirmek için */
+        #sudoku-board {
+            /* Dış en kalın sınır */
+            border: 4px solid #111827; 
+        }
+
+        /* 3x3 kutuların kendi sınırı (JS ile eklenecek) */
+        .sudoku-box {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            grid-template-rows: repeat(3, 1fr);
+            gap: 0;
+            /* 3x3 kutu sınırı (dış sınırdan ince, hücreden kalın) */
+            border: 2px solid #111827;
+        }
+
+
+        /* Hatalı hücre */
+        .cell.invalid {
+            background-color: #fee2e2; /* red-100 */
+            color: #b91c1c; /* red-700 */
+        }
+
+        /* Doğru hücre */
+        .cell.correct {
+            background-color: #dcfce7; /* green-100 */
+            color: #15803d; /* green-700 */
+        }
+    </style>
+</head>
+<body class="bg-gray-200 flex items-center justify-center min-h-screen font-sans p-4">
+
+    <div class="bg-white p-6 rounded-lg shadow-xl w-full max-w-lg">
+        <h1 class="text-3xl font-bold text-center text-gray-800 mb-4">Sudoku</h1>
+
+        <!-- Zorluk Seviyesi Kontrolleri -->
+        <div class="flex justify-center gap-2 mb-4" id="difficulty-controls">
+            <button data-difficulty="easy" class="px-4 py-2 bg-green-600 text-white rounded-md shadow hover:bg-green-700 transition duration-200">Kolay</button>
+            <button data-difficulty="medium" class="px-4 py-2 bg-yellow-500 text-white rounded-md shadow hover:bg-yellow-600 transition duration-200">Orta</button>
+            <button data-difficulty="hard" class="px-4 py-2 bg-red-600 text-white rounded-md shadow hover:bg-red-700 transition duration-200">Zor</button>
+        </div>
+
+        <!-- Sudoku Tahtası -->
+        <div id="sudoku-board" class="grid grid-cols-3 grid-rows-3 gap-0 w-full mx-auto mb-4">
+            <!-- Hücreler ve 3x3 kutular JavaScript ile eklenecek -->
+        </div>
+
+        <!-- Oyun Kontrolleri -->
+        <div class="flex justify-center gap-2 mb-4" id="game-controls">
+            <button id="check-solution" class="px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 transition duration-200">Kontrol Et</button>
+            <button id="show-solution" class="px-4 py-2 bg-gray-600 text-white rounded-md shadow hover:bg-gray-700 transition duration-200">Çözümü Göster</button>
+        </div>
+
+        <!-- Mesaj Alanı -->
+        <p id="message" class="text-center text-lg font-medium h-6"></p>
+
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardElement = document.getElementById('sudoku-board');
+            const difficultyControls = document.getElementById('difficulty-controls');
+            const checkButton = document.getElementById('check-solution');
+            const solveButton = document.getElementById('show-solution');
+            const messageElement = document.getElementById('message');
+            
+            let currentBoard = [];
+            let solutionBoard = [];
+            let currentDifficulty = 'easy';
+
+            const difficultySettings = {
+                easy: 46,  // Kaldırılacak hücre sayısı (81 - 46 = 35 ipucu)
+                medium: 51, // (81 - 51 = 30 ipucu)
+                hard: 56   // (81 - 56 = 25 ipucu)
+            };
+
+            // 1. OYUN KURULUMU
+
+            // Tahtayı UI'da oluşturur
+            function createBoardUI() {
+                boardElement.innerHTML = ''; // Tahtayı temizle
+                
+                // 3x3'lük 9 kutu oluştur
+                for (let boxIndex = 0; boxIndex < 9; boxIndex++) {
+                    const box = document.createElement('div');
+                    // 3x3 kutunun kendisi de bir grid'dir ve sınırları vardır
+                    // CSS'teki .sudoku-box yerine Tailwind sınıflarını da kullanabilirdik,
+                    // ama okunurluk için CSS sınıfı ekledik.
+                    box.classList.add('sudoku-box');
+                    
+                    const boxRowStart = Math.floor(boxIndex / 3) * 3;
+                    const boxColStart = (boxIndex % 3) * 3;
+
+                    // Her kutu içine 3x3 hücre (input) ekle
+                    for (let r = 0; r < 3; r++) {
+                        for (let c = 0; c < 3; c++) {
+                            const globalRow = boxRowStart + r;
+                            const globalCol = boxColStart + c;
+
+                            const cell = document.createElement('input');
+                            cell.type = 'tel'; // Mobil için sayısal klavye
+                            cell.maxLength = 1;
+                            cell.classList.add('cell');
+                            cell.dataset.row = globalRow;
+                            cell.dataset.col = globalCol;
+                            
+                            // Sadece 1-9 arası girişlere izin ver
+                            cell.addEventListener('input', handleInput);
+                            box.appendChild(cell);
+                        }
+                    }
+                    boardElement.appendChild(box);
+                }
+            }
+            
+            // Oyunu başlatır
+            function startGame(difficulty) {
+                currentDifficulty = difficulty;
+                messageElement.textContent = '';
+                
+                // 1. Tamamen çözülmüş bir tahta oluştur
+                let board = Array(9).fill(0).map(() => Array(9).fill(0));
+                solveSudoku(board); // Boş tahtayı çözerek doldur
+                solutionBoard = JSON.parse(JSON.stringify(board)); // Çözümü sakla (deep copy)
+
+                // 2. Zorluğa göre hücreleri boşalt
+                currentBoard = pokeHoles(board, difficultySettings[difficulty]);
+                
+                // 3. Tahtayı UI'da güncelle
+                updateBoardUI(currentBoard);
+            }
+
+            // UI'daki tahtayı verilen `board` dizisine göre günceller
+            function updateBoardUI(board) {
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const cell = getCell(r, c);
+                        const value = board[r][c];
+                        
+                        cell.classList.remove('invalid', 'correct', 'readonly');
+                        
+                        if (value > 0) {
+                            cell.value = value;
+                            cell.readOnly = true;
+                            cell.classList.add('readonly');
+                        } else {
+                            cell.value = '';
+                            cell.readOnly = false;
+                        }
+                    }
+                }
+            }
+
+            // Belirli bir (r, c) koordinatındaki hücre DOM elementini alır
+            function getCell(r, c) {
+                return boardElement.querySelector(`.cell[data-row="${r}"][data-col="${c}"]`);
+            }
+
+            // 2. SUDOKU MANTIĞI (OLUŞTURMA VE ÇÖZME)
+
+            // Fisher-Yates (aka Knuth) Shuffle
+            function shuffle(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = Math.floor(Math.random() * (i + 1));
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+            }
+
+            // Verilen bir tahtayı çözen backtracking (geri izleme) fonksiyonu
+            function solveSudoku(board) {
+                const emptySpot = findEmptyCell(board);
+                if (!emptySpot) return true; // Çözüldü
+
+                const [r, c] = emptySpot;
+                const numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+                shuffle(numbers); // Çeşitlilik için sayıları karıştır
+
+                for (let num of numbers) {
+                    if (isValidMove(board, r, c, num)) {
+                        board[r][c] = num;
+                        if (solveSudoku(board)) {
+                            return true;
+                        }
+                        board[r][c] = 0; // Geri al (backtrack)
+                    }
+                }
+                return false;
+            }
+
+            // Bir sayının (r, c) konumuna yerleştirilip yerleştirilemeyeceğini kontrol eder
+            function isValidMove(board, r, c, num) {
+                // Satırı kontrol et
+                for (let i = 0; i < 9; i++) {
+                    if (board[r][i] === num) return false;
+                }
+                // Sütunu kontrol et
+                for (let i = 0; i < 9; i++) {
+                    if (board[i][c] === num) return false;
+                }
+                // 3x3 kutuyu kontrol et
+                const boxRow = Math.floor(r / 3) * 3;
+                const boxCol = Math.floor(c / 3) * 3;
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        if (board[boxRow + i][boxCol + j] === num) return false;
+                    }
+                }
+                return true;
+            }
+
+            // Kullanıcının girdiği bir sayının mevcut tahtada geçerli bir hamle olup olmadığını kontrol eder
+            // (r, c) hücresi HARİÇ diğer hücrelere bakar
+            function isPlacementValid(board, r, c, num) {
+                // Satırı kontrol et (kendisi hariç)
+                for (let i = 0; i < 9; i++) {
+                    if (i !== c && board[r][i] === num) return false;
+                }
+                // Sütunu kontrol et (kendisi hariç)
+                for (let i = 0; i < 9; i++) {
+                    if (i !== r && board[i][c] === num) return false;
+                }
+                // 3x3 kutuyu kontrol et (kendisi hariç)
+                const boxRow = Math.floor(r / 3) * 3;
+                const boxCol = Math.floor(c / 3) * 3;
+                for (let i = 0; i < 3; i++) {
+                    for (let j = 0; j < 3; j++) {
+                        const cellR = boxRow + i;
+                        const cellC = boxCol + j;
+                        // Kontrol edilen hücrenin kendisi değilse ve değer aynıysa
+                        if ((cellR !== r || cellC !== c) && board[cellR][cellC] === num) {
+                            return false;
+                        }
+                    }
+                }
+                return true;
+            }
+
+
+            // Tahtadaki ilk boş hücreyi (0) bulur [r, c] olarak döndürür
+            function findEmptyCell(board) {
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        if (board[r][c] === 0) return [r, c];
+                    }
+                }
+                return null;
+            }
+
+            // Tamamlanmış bir tahtadan delikler açarak (hücreleri boşaltarak) bulmaca oluşturur
+            function pokeHoles(board, holes) {
+                let puzzleBoard = JSON.parse(JSON.stringify(board)); // Deep copy
+                let removed = 0;
+
+                while (removed < holes) {
+                    const r = Math.floor(Math.random() * 9);
+                    const c = Math.floor(Math.random() * 9);
+
+                    if (puzzleBoard[r][c] !== 0) {
+                        puzzleBoard[r][c] = 0;
+                        removed++;
+                    }
+                }
+                return puzzleBoard;
+            }
+
+            // 3. KULLANICI ETKİLEŞİMİ
+
+            // Kullanıcı hücreye giriş yaptığında tetiklenir
+            function handleInput(e) {
+                const cell = e.target;
+                const value = cell.value;
+                
+                // Geçersiz karakterleri temizle (sadece 1-9)
+                if (!/^[1-9]$/.test(value)) {
+                    cell.value = '';
+                }
+
+                const r = parseInt(cell.dataset.row);
+                const c = parseInt(cell.dataset.col);
+                const num = cell.value === '' ? 0 : parseInt(cell.value);
+
+                // currentBoard'u (mevcut oyun tahtası dizisini) güncelle
+                currentBoard[r][c] = num;
+                
+                // Kontrol sonrası eklenen stil sınıflarını temizle
+                cell.classList.remove('invalid', 'correct');
+                messageElement.textContent = '';
+
+                if (num === 0) {
+                    // Hücre boşaltıldıysa, hata gösterme
+                    return;
+                }
+
+                // Anlık doğrulama yap
+                if (!isPlacementValid(currentBoard, r, c, num)) {
+                    cell.classList.add('invalid');
+                }
+            }
+            
+            // "Kontrol Et" butonuna basıldığında
+            function checkSolution() {
+                let hasErrors = false;
+                let isComplete = true;
+
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const cell = getCell(r, c);
+                        if (cell.readOnly) continue; // İpuçlarını atla
+                        
+                        const userValue = parseInt(cell.value) || 0;
+                        const solutionValue = solutionBoard[r][c];
+
+                        cell.classList.remove('invalid', 'correct');
+
+                        if (userValue === 0) {
+                            isComplete = false;
+                        } else if (userValue !== solutionValue) {
+                            hasErrors = true;
+                            cell.classList.add('invalid');
+                        } else {
+                            cell.classList.add('correct');
+                        }
+                    }
+                }
+
+                if (isComplete && !hasErrors) {
+                    messageElement.textContent = 'Tebrikler, bulmacayı çözdünüz!';
+                    messageElement.classList.add('text-green-600');
+                    messageElement.classList.remove('text-red-600');
+                } else if (hasErrors) {
+                    messageElement.textContent = 'Hatalar var. Kırmızı hücreleri kontrol edin.';
+                    messageElement.classList.add('text-red-600');
+                    messageElement.classList.remove('text-green-600');
+                } else {
+                    messageElement.textContent = 'Doğru yoldasınız, devam edin!';
+                    messageElement.classList.remove('text-red-600', 'text-green-600');
+                }
+            }
+
+            // "Çözümü Göster" butonuna basıldığında
+            function showSolution() {
+                updateBoardUI(solutionBoard); // Çözüm tahtasını göster
+                // Tüm hücreleri 'readonly' ve 'correct' yap
+                for (let r = 0; r < 9; r++) {
+                    for (let c = 0; c < 9; c++) {
+                        const cell = getCell(r,c);
+                        cell.readOnly = true;
+                        if (!cell.classList.contains('readonly')) {
+                             cell.classList.add('correct');
+                        }
+                    }
+                }
+                messageElement.textContent = 'Çözüm gösteriliyor.';
+                messageElement.classList.remove('text-red-600', 'text-green-600');
+            }
+            
+            // Olay Dinleyicileri (Event Listeners)
+            
+            // Zorluk butonları
+            difficultyControls.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const difficulty = e.target.dataset.difficulty;
+                    startGame(difficulty);
+                }
+            });
+
+            // Aksiyon butonları
+            checkButton.addEventListener('click', checkSolution);
+            solveButton.addEventListener('click', showSolution);
+
+            // Oyunu başlat
+            createBoardUI();
+            startGame(currentDifficulty);
+        });
+    </script>
+</body>
+</html>
