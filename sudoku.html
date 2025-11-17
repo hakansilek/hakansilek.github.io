@@ -92,7 +92,8 @@
         
         <!-- Kontrol Modu Kontrolleri (YENİ) -->
         <div class="flex justify-center gap-2 mb-4" id="check-mode-controls">
-            <button data-mode="instant" class="control-button px-4 py-2 rounded-md transition duration-200 active">Anlık Kontrol</button>
+            <button data-mode="mistake" class="control-button px-4 py-2 rounded-md transition duration-200 active">Hata Kontrolü</button>
+            <button data-mode="conflict" class="control-button px-4 py-2 rounded-md transition duration-200">Çakışma Kontrolü</button>
             <button data-mode="manual" class="control-button px-4 py-2 rounded-md transition duration-200">Manuel Kontrol</button>
         </div>
 
@@ -124,7 +125,8 @@
             let currentBoard = [];
             let solutionBoard = [];
             let currentDifficulty = 'easy';
-            let checkMode = 'instant'; // Yeni: 'instant' or 'manual'
+            let checkMode = 'mistake'; // Yeni varsayılan mod: 'mistake' (hata kontrolü)
+                                       // Diğerleri: 'conflict' (çakışma), 'manual'
 
             const difficultySettings = {
                 easy: 46,  // Kaldırılacak hücre sayısı (81 - 46 = 35 ipucu)
@@ -187,8 +189,8 @@
                 // 3. Tahtayı UI'da güncelle
                 updateBoardUI(currentBoard);
 
-                // 4. Kontrol modunu 'anlık' olarak ayarla (YENİ)
-                setCheckMode('instant');
+                // 4. Kontrol modunu 'hata' olarak ayarla (YENİ)
+                setCheckMode('mistake');
             }
 
             // ... (updateBoardUI ve getCell fonksiyonları) ...
@@ -382,11 +384,19 @@
                 }
 
                 // Anlık doğrulama yap (sadece 'instant' modundaysa) (GÜNCELLENDİ)
-                if (checkMode === 'instant') {
+                // Anlık doğrulama yap (seçili moda göre)
+                if (checkMode === 'mistake') {
+                    // Hata Kontrolü: Girilen sayı, gerçek çözüme göre doğru mu?
+                    if (num !== solutionBoard[r][c]) {
+                        cell.classList.add('invalid');
+                    }
+                } else if (checkMode === 'conflict') {
+                    // Çakışma Kontrolü: Girilen sayı, satır/sütun/kutuda başka bir sayıyla çakışıyor mu?
                     if (!isPlacementValid(currentBoard, r, c, num)) {
                         cell.classList.add('invalid');
                     }
                 }
+                // 'manual' modunda hiçbir şey yapılmaz.
             }
             
             // "Kontrol Et" butonuna basıldığında
