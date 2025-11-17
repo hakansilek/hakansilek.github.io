@@ -64,6 +64,18 @@
             background-color: #dcfce7; /* green-100 */
             color: #15803d; /* green-700 */
         }
+        
+        /* Kontrol modu butonları için */
+        .control-button {
+            background-color: #e5e7eb; /* gray-200 */
+            color: #374151; /* gray-700 */
+            transition: all 0.2s;
+        }
+        /* Aktif kontrol modu butonu için stil */
+        .control-button.active {
+            background-color: #1d4ed8; /* blue-700 */
+            color: white;
+        }
     </style>
 </head>
 <body class="bg-gray-200 flex items-center justify-center min-h-screen font-sans p-4">
@@ -76,6 +88,12 @@
             <button data-difficulty="easy" class="px-4 py-2 bg-green-600 text-white rounded-md shadow hover:bg-green-700 transition duration-200">Kolay</button>
             <button data-difficulty="medium" class="px-4 py-2 bg-yellow-500 text-white rounded-md shadow hover:bg-yellow-600 transition duration-200">Orta</button>
             <button data-difficulty="hard" class="px-4 py-2 bg-red-600 text-white rounded-md shadow hover:bg-red-700 transition duration-200">Zor</button>
+        </div>
+        
+        <!-- Kontrol Modu Kontrolleri (YENİ) -->
+        <div class="flex justify-center gap-2 mb-4" id="check-mode-controls">
+            <button data-mode="instant" class="control-button px-4 py-2 rounded-md transition duration-200 active">Anlık Kontrol</button>
+            <button data-mode="manual" class="control-button px-4 py-2 rounded-md transition duration-200">Manuel Kontrol</button>
         </div>
 
         <!-- Sudoku Tahtası -->
@@ -98,6 +116,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const boardElement = document.getElementById('sudoku-board');
             const difficultyControls = document.getElementById('difficulty-controls');
+            const checkModeControls = document.getElementById('check-mode-controls'); // Yeni
             const checkButton = document.getElementById('check-solution');
             const solveButton = document.getElementById('show-solution');
             const messageElement = document.getElementById('message');
@@ -105,6 +124,7 @@
             let currentBoard = [];
             let solutionBoard = [];
             let currentDifficulty = 'easy';
+            let checkMode = 'instant'; // Yeni: 'instant' or 'manual'
 
             const difficultySettings = {
                 easy: 46,  // Kaldırılacak hücre sayısı (81 - 46 = 35 ipucu)
@@ -166,9 +186,12 @@
                 
                 // 3. Tahtayı UI'da güncelle
                 updateBoardUI(currentBoard);
+
+                // 4. Kontrol modunu 'anlık' olarak ayarla (YENİ)
+                setCheckMode('instant');
             }
 
-            // UI'daki tahtayı verilen `board` dizisine göre günceller
+            // ... (updateBoardUI ve getCell fonksiyonları) ...
             function updateBoardUI(board) {
                 for (let r = 0; r < 9; r++) {
                     for (let c = 0; c < 9; c++) {
@@ -195,8 +218,8 @@
             }
 
             // 2. SUDOKU MANTIĞI (OLUŞTURMA VE ÇÖZME)
-
-            // Fisher-Yates (aka Knuth) Shuffle
+            // ... (Tüm Sudoku mantığı fonksiyonları değişmedi) ...
+            // ... (isValidMove, isPlacementValid, findEmptyCell, pokeHoles vb.) ...
             function shuffle(array) {
                 for (let i = array.length - 1; i > 0; i--) {
                     const j = Math.floor(Math.random() * (i + 1));
@@ -301,7 +324,36 @@
                 return puzzleBoard;
             }
 
+
             // 3. KULLANICI ETKİLEŞİMİ
+
+            // Kontrol modunu ayarlar ve UI'ı günceller (YENİ)
+            function setCheckMode(mode) {
+                checkMode = mode;
+                
+                // Butonların UI'ını güncelle
+                const buttons = checkModeControls.querySelectorAll('button');
+                buttons.forEach(btn => {
+                    if (btn.dataset.mode === mode) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+
+                // Mod 'manual' ise, tüm 'invalid' sınıflarını temizle
+                if (mode === 'manual') {
+                    clearAllValidationClasses();
+                }
+            }
+
+            // Tüm hata/doğru sınıflarını temizler (YENİ)
+            function clearAllValidationClasses() {
+                const cells = boardElement.querySelectorAll('.cell');
+                cells.forEach(cell => {
+                    cell.classList.remove('invalid', 'correct');
+                });
+            }
 
             // Kullanıcı hücreye giriş yaptığında tetiklenir
             function handleInput(e) {
@@ -329,15 +381,18 @@
                     return;
                 }
 
-                // Anlık doğrulama yap
-                if (!isPlacementValid(currentBoard, r, c, num)) {
-                    cell.classList.add('invalid');
+                // Anlık doğrulama yap (sadece 'instant' modundaysa) (GÜNCELLENDİ)
+                if (checkMode === 'instant') {
+                    if (!isPlacementValid(currentBoard, r, c, num)) {
+                        cell.classList.add('invalid');
+                    }
                 }
             }
             
             // "Kontrol Et" butonuna basıldığında
             function checkSolution() {
                 let hasErrors = false;
+                // ... (fonksiyonun kalanı değişmedi) ...
                 let isComplete = true;
 
                 for (let r = 0; r < 9; r++) {
@@ -378,7 +433,7 @@
             // "Çözümü Göster" butonuna basıldığında
             function showSolution() {
                 updateBoardUI(solutionBoard); // Çözüm tahtasını göster
-                // Tüm hücreleri 'readonly' ve 'correct' yap
+                // ... (fonksiyonun kalanı değişmedi) ...
                 for (let r = 0; r < 9; r++) {
                     for (let c = 0; c < 9; c++) {
                         const cell = getCell(r,c);
@@ -399,6 +454,14 @@
                 if (e.target.tagName === 'BUTTON') {
                     const difficulty = e.target.dataset.difficulty;
                     startGame(difficulty);
+                }
+            });
+
+            // Yeni: Kontrol Modu butonları
+            checkModeControls.addEventListener('click', (e) => {
+                if (e.target.tagName === 'BUTTON') {
+                    const mode = e.target.dataset.mode;
+                    setCheckMode(mode);
                 }
             });
 
