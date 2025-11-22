@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Doodle Zıp Zıp</title>
+    <!-- Doodle hissi için el yazısı fontu -->
+    <link href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap" rel="stylesheet">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f4f1ea; /* Kağıt rengi */
+            background-image: 
+                linear-gradient(#e1dfd8 1px, transparent 1px),
+                linear-gradient(90deg, #e1dfd8 1px, transparent 1px);
+            background-size: 20px 20px;
+            font-family: 'Patrick Hand', cursive;
+            overflow: hidden;
+            touch-action: none; /* Mobilde kaydırmayı engelle */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 480px;
+            height: 100%;
+            max-height: 800px;
+            background: transparent;
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .score-display {
+            font-size: 32px;
+            font-weight: bold;
+            color: #333;
+            text-align: left;
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(244, 241, 234, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            text-align: center;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 48px;
+            color: #d35400;
+            margin-bottom: 10px;
+            text-shadow: 2px 2px 0px #333;
+        }
+
+        p {
+            font-size: 24px;
+            color: #333;
+            margin: 10px 0;
+        }
+
+        button {
+            background: #8e44ad;
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 28px;
+            font-family: 'Patrick Hand', cursive;
+            cursor: pointer;
+            border-radius: 5px;
+            box-shadow: 3px 3px 0px #333;
+            transition: transform 0.1s;
+            margin-top: 20px;
+        }
+
+        button:active {
+            transform: translate(3px, 3px);
+            box-shadow: none;
+        }
+        
+        /* Mobil Zıplama Butonu */
+        #mobile-jump-btn {
+            pointer-events: auto; /* UI layer tıklamayı engellese de bu buton çalışsın */
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #e74c3c; /* Kırmızımsı */
+            padding: 15px 60px;
+            font-size: 30px;
+            z-index: 5;
+            display: none; /* JS ile mobilde açılacak */
+        }
+        #mobile-jump-btn:active {
+             transform: translateX(-50%) translate(3px, 3px);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+        
+        #mobile-controls-hint {
+            margin-top: 10px;
+            font-size: 18px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div class="score-display">Skor: <span id="score">0</span></div>
+        <button id="mobile-jump-btn">ZIPLA(SPACE)</button>
+    </div>
+
+    <div id="start-screen">
+        <h1>Doodle Zıp Zıp</h1>
+        <p>Platforma in, dur ve zıpla!</p>
+        <p id="mobile-controls-hint">Yön Tuşları + Space</p>
+        <button id="start-btn">OYNA</button>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1>Oyun Bitti!</h1>
+        <p>Skorun: <span id="final-score">0</span></p>
+        <p>En Yüksek: <span id="high-score">0</span></p>
+        <button id="restart-btn">TEKRAR OYNA</button>
+    </div>
+</div>
+
+<script>
+    // --- Kurulum ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const scoreEl = document.getElementById('score');
+    const finalScoreEl = document.getElementById('final-score');
+    const highScoreEl = document.getElementById('high-score');
+    const startScreen = document.getElementById('start-screen');
+    const gameOverScreen = document.getElementById('game-over-screen');
+    const startBtn = document.getElementById('start-btn');
+    const restartBtn = document.getElementById('restart-btn');
+    const mobileJumpBtn = document.getElementById('mobile-jump-btn');
+
+    // Oyun Değişkenleri
+    let gameLoopId;
+    let width, height;
+    let score = 0;
+    let highScore = localStorage.getItem('doodleHighScore') || 0;
+    let gameState = 'start'; // start, playing, gameover
+
+    // Fizik Ayarları
+    const gravity = 0.4;
+    const jumpForce = -10;
+    
+    // Karakter (Doodler)
+    const doodler = {
+        x: 0,
+        y: 0,
+        width: 40,
+        height: 40,
+        vx: 0,
+        vy: 0,
+        speed: 6,
+        direction: 1,
+        color: '#8BC34A',
+        legAngle: 0,
+        isGrounded: false,
+        currentPlatform: null
+    };
+
+    // Platformlar
+    let platforms = [];
+    const platformWidth = 70;
+    const platformHeight = 15;
+    
+    // Kontroller
+    const keys = {
+        ArrowLeft: false,
+        ArrowRight: false,
+        Space: false
+    };
+    
+    // Dokunmatik Kontroller
+    let touchLeft = false;
+    let touchRight = false;
+    let touchJump = false;
+
+    // --- Boyutlandırma ---
+    function resize() {
+        width = canvas.parentElement.clientWidth;
+        height = canvas.parentElement.clientHeight;
+        canvas.width = width;
+        canvas.height = height;
+        
+        // Eğer ekran darsa (mobil gibiyse) zıplama butonunu göster
+        if (width < 600 && gameState === 'playing') {
+            mobileJumpBtn.style.display = 'block';
+            document.getElementById('mobile-controls-hint').innerText = "Dokunarak Yönlendirin + Butonla Zıplayın";
+        } else {
+            mobileJumpBtn.style.display = 'none';
+        }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- Girdi Dinleyicileri ---
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'Space') {
+            keys.Space = true;
+            e.preventDefault(); // Sayfayı kaydırmayı engelle
+        }
+        if (keys.hasOwnProperty(e.code)) keys[e.code] = true;
+    });
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'Space') keys.Space = false;
+        if (keys.hasOwnProperty(e.code)) keys[e.code] = false;
+    });
+
+    // Mobil Zıplama Butonu
+    mobileJumpBtn.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        touchJump = true;
+    });
+    mobileJumpBtn.addEventListener('touchend', (e) => {
+        e.preventDefault();
+        touchJump = false;
+    });
+    mobileJumpBtn.addEventListener('mousedown', () => touchJump = true);
+    mobileJumpBtn.addEventListener('mouseup', () => touchJump = false);
+
+
+    // Mobil Dokunmatik (Yönlendirme)
+    canvas.addEventListener('touchstart', handleTouch, {passive: false});
+    canvas.addEventListener('touchend', handleTouchEnd, {passive: false});
+    
+    function handleTouch(e) {
+        e.preventDefault();
+        // Sadece ilk dokunuşu yönlendirme olarak al
+        const touchX = e.touches[0].clientX;
+        const screenMid = window.innerWidth / 2;
+        if (touchX < screenMid) {
+            touchLeft = true;
+            touchRight = false;
+        } else {
+            touchLeft = false;
+            touchRight = true;
+        }
+    }
+    
+    function handleTouchEnd(e) {
+        e.preventDefault();
+        // Eğer hala ekranda başka parmak varsa (örn. çoklu dokunuş) kontrol et
+        if (e.touches.length === 0) {
+            touchLeft = false;
+            touchRight = false;
+        }
+    }
+
+    // --- Oyun Mantığı ---
+
+    function initGame() {
+        score = 0;
+        updateScore(0);
+        platforms = [];
+        
+        // Başlangıç karakter konumu
+        doodler.x = width / 2 - doodler.width / 2;
+        doodler.y = height - 150;
+        doodler.vx = 0;
+        doodler.vy = 0;
+        doodler.direction = 1;
+        doodler.isGrounded = false;
+        doodler.currentPlatform = null;
+
+        // Başlangıç platformları
+        let platformCount = Math.floor(height / 100);
+        for (let i = 0; i < platformCount; i++) {
+            let platY = height - 50 - i * 100;
+            let platX = (i === 0) ? width / 2 - platformWidth / 2 : Math.random() * (width - platformWidth);
+            platforms.push({ x: platX, y: platY, w: platformWidth, h: platformHeight });
+        }
+
+        gameState = 'playing';
+        startScreen.classList.add('hidden');
+        gameOverScreen.classList.add('hidden');
+        resize(); // Buton görünürlüğünü ayarla
+        gameLoop();
+    }
+
+    function update() {
+        if (gameState !== 'playing') return;
+
+        // Hareket (Sol/Sağ)
+        if (keys.ArrowLeft || touchLeft) {
+            doodler.vx = -doodler.speed;
+            doodler.direction = -1;
+        } else if (keys.ArrowRight || touchRight) {
+            doodler.vx = doodler.speed;
+            doodler.direction = 1;
+        } else {
+            doodler.vx = 0;
+        }
+
+        // ZIPLAMA MANTIĞI
+        // Eğer yerdeyse ve tuşa basıldıysa zıpla
+        if (doodler.isGrounded && (keys.Space || touchJump)) {
+            doodler.vy = jumpForce;
+            doodler.isGrounded = false;
+            doodler.currentPlatform = null;
+        }
+
+        // FİZİK GÜNCELLEME
+        if (doodler.isGrounded) {
+            // Yerdeyken
+            doodler.vy = 0;
+            if (doodler.currentPlatform) {
+                // Platformun üzerinde kal
+                doodler.y = doodler.currentPlatform.y - doodler.height;
+                
+                // Platformdan aşağı düştü mü?
+                if (doodler.x + doodler.width < doodler.currentPlatform.x || 
+                    doodler.x > doodler.currentPlatform.x + doodler.currentPlatform.w) {
+                    doodler.isGrounded = false;
+                    doodler.currentPlatform = null;
+                }
+            }
+        } else {
+            // Havadayken
+            doodler.vy += gravity;
+        }
+
+        doodler.x += doodler.vx;
+        doodler.y += doodler.vy;
+
+        // Ekran sınırlarından geçiş (Pac-man tarzı)
+        if (doodler.x + doodler.width < 0) {
+            doodler.x = width;
+        } else if (doodler.x > width) {
+            doodler.x = -doodler.width;
+        }
+
+        // Platform Çarpışması (Sadece düşerken)
+        if (!doodler.isGrounded && doodler.vy > 0) {
+            platforms.forEach(plat => {
+                if (
+                    doodler.x < plat.x + plat.w &&
+                    doodler.x + doodler.width > plat.x &&
+                    doodler.y + doodler.height > plat.y &&
+                    doodler.y + doodler.height < plat.y + plat.h + 20 // Biraz daha toleranslı
+                ) {
+                    // Çarpışma gerçekleşti -> Dur ve Yere Bas
+                    doodler.isGrounded = true;
+                    doodler.currentPlatform = plat;
+                    doodler.y = plat.y - doodler.height;
+                    doodler.vy = 0;
+                }
+            });
+        }
+
+        // Ekran Kaydırma (Kamera)
+        // Karakter ekranın orta çizgisini geçerse, karakteri orada tut ve dünyayı aşağı it
+        if (doodler.y < height / 2) {
+            let delta = height / 2 - doodler.y;
+            doodler.y = height / 2;
+            
+            platforms.forEach(plat => {
+                plat.y += delta;
+            });
+
+            // Puan artışı
+            score += Math.floor(delta);
+            updateScore(score);
+
+            // Aşağı giden platformları sil ve yukarı yeni ekle
+            platforms = platforms.filter(plat => plat.y < height);
+            
+            while (platforms.length < 7) {
+                addNewPlatform();
+            }
+        }
+
+        // Oyun Bitti Kontrolü
+        if (doodler.y > height) {
+            gameOver();
+        }
+    }
+
+    function addNewPlatform() {
+        let highestPlatY = Math.min(...platforms.map(p => p.y));
+        // Çok uzak olmasın (max zıplama mesafesi ~150px)
+        let y = highestPlatY - (80 + Math.random() * 40); 
+        let x = Math.random() * (width - platformWidth);
+        platforms.push({ x: x, y: y, w: platformWidth, h: platformHeight });
+    }
+
+    function gameOver() {
+        gameState = 'gameover';
+        cancelAnimationFrame(gameLoopId);
+        mobileJumpBtn.style.display = 'none'; // Butonu gizle
+        
+        if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('doodleHighScore', highScore);
+        }
+
+        finalScoreEl.innerText = score;
+        highScoreEl.innerText = highScore;
+        gameOverScreen.classList.remove('hidden');
+    }
+
+    function updateScore(s) {
+        scoreEl.innerText = s;
+    }
+
+    // --- Çizim ---
+
+    function draw() {
+        ctx.clearRect(0, 0, width, height);
+
+        // Platformları Çiz
+        ctx.fillStyle = '#8e44ad';
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 2;
+        
+        platforms.forEach(plat => {
+            // Karalama tarzı platform
+            ctx.beginPath();
+            ctx.rect(plat.x, plat.y, plat.w, plat.h);
+            ctx.fillStyle = '#D2B48C'; // Açık kahve
+            ctx.fill();
+            ctx.stroke();
+            
+            // Detay (Üst yeşillik)
+            ctx.beginPath();
+            ctx.moveTo(plat.x, plat.y);
+            ctx.lineTo(plat.x + plat.w, plat.y);
+            ctx.strokeStyle = '#6b8c42';
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = '#333';
+        });
+
+        // Karakteri Çiz (Basit bir Doodle Canavarı)
+        drawDoodler(doodler.x, doodler.y);
+    }
+
+    function drawDoodler(x, y) {
+        const w = doodler.width;
+        const h = doodler.height;
+        
+        ctx.save();
+        ctx.translate(x + w/2, y + h/2);
+        
+        // Yöne göre çevir
+        ctx.scale(doodler.direction, 1);
+        
+        // Vücut
+        ctx.fillStyle = doodler.color;
+        ctx.strokeStyle = '#333';
+        ctx.lineWidth = 3;
+        
+        ctx.beginPath();
+        ctx.arc(0, -5, 20, Math.PI, 0); // Kafa
+        ctx.lineTo(20, 15); // Sağ alt
+        // Bacaklar (Zıplama durumuna göre biraz oynayabilir)
+        if (doodler.vy < 0) { // Zıplıyor
+            ctx.lineTo(10, 25);
+            ctx.lineTo(0, 15);
+            ctx.lineTo(-10, 25);
+        } else { // Düşüyor
+            ctx.lineTo(10, 20);
+            ctx.lineTo(0, 15);
+            ctx.lineTo(-10, 20);
+        }
+        ctx.lineTo(-20, 15); // Sol alt
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        // Gözler
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(8, -5, 6, 0, Math.PI * 2); // Sağ göz
+        ctx.arc(-8, -5, 4, 0, Math.PI * 2); // Sol göz (küçük, perspektif için)
+        ctx.fill();
+        ctx.stroke();
+
+        // Göz Bebekleri
+        ctx.fillStyle = 'black';
+        ctx.beginPath();
+        ctx.arc(10, -5, 2, 0, Math.PI * 2);
+        ctx.arc(-6, -5, 1.5, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Burun / Ağız (Doodle tarzı uzun burun)
+        ctx.beginPath();
+        ctx.moveTo(14, -2);
+        ctx.quadraticCurveTo(25, 0, 14, 5);
+        ctx.stroke();
+
+        ctx.restore();
+    }
+
+    function gameLoop() {
+        if (gameState === 'playing') {
+            update();
+            draw();
+            gameLoopId = requestAnimationFrame(gameLoop);
+        }
+    }
+
+    // --- Buton Olayları ---
+    startBtn.addEventListener('click', initGame);
+    restartBtn.addEventListener('click', initGame);
+
+    // İlk yükleme
+    resize();
+
+</script>
+</body>
+</html>
