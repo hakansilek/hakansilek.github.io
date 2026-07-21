@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MD Viewer</title>
+<link id="hljs-light" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css">
+<link id="hljs-dark" rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" disabled>
+<style>
+:root {
+  --bg: #eef0f4;
+  --surface: #ffffff;
+  --surface-2: #f6f7f9;
+  --ink: #191b22;
+  --ink-soft: #3c4049;
+  --muted: #737a86;
+  --border: #e0e3e9;
+  --border-strong: #cbd0da;
+  --accent: #3d63ff;
+  --accent-soft: rgba(61, 99, 255, 0.1);
+  --code-bg: #f4f5f8;
+  --quote-bar: #c6ccd7;
+  --danger: #d64545;
+  --danger-soft: rgba(214, 69, 69, 0.08);
+  --shadow: 0 1px 2px rgba(20, 22, 30, 0.05), 0 8px 24px rgba(20, 22, 30, 0.06);
+  --mono: ui-monospace, "SF Mono", "SFMono-Regular", Menlo, Consolas, "Liberation Mono", monospace;
+  --serif: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, "Times New Roman", serif;
+  --ui: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+:root[data-theme="dark"] {
+  --bg: #101217;
+  --surface: #171a21;
+  --surface-2: #1c2028;
+  --ink: #e8eaef;
+  --ink-soft: #c3c8d2;
+  --muted: #8b93a1;
+  --border: #262b34;
+  --border-strong: #333944;
+  --accent: #7d97ff;
+  --accent-soft: rgba(125, 151, 255, 0.14);
+  --code-bg: #12151b;
+  --quote-bar: #333944;
+  --danger: #ff7a7a;
+  --danger-soft: rgba(255, 122, 122, 0.1);
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--ui);
+  -webkit-font-smoothing: antialiased;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.wordmark {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.wordmark .dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  background: var(--accent);
+  transform: rotate(45deg);
+}
+.spacer { flex: 1 1 auto; }
+.group { display: flex; align-items: center; gap: 6px; }
+button, .btn, label.btn {
+  font-family: var(--ui);
+  font-size: 13px;
+  color: var(--ink-soft);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 11px;
+  cursor: pointer;
+  line-height: 1;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+button:hover, label.btn:hover { border-color: var(--border-strong); color: var(--ink); }
+button:focus-visible, label.btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.segmented {
+  display: inline-flex;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.segmented button {
+  border: none;
+  background: transparent;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+.segmented button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08);
+}
+:root[data-theme="dark"] .segmented button[aria-pressed="true"] { background: #2a303b; }
+.icon-btn {
+  width: 34px;
+  padding: 0;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.workspace {
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 44%) minmax(0, 1fr);
+  min-height: 0;
+}
+.workspace[data-mode="preview"],
+.workspace[data-mode="source"] { grid-template-columns: minmax(0, 1fr); }
+.pane { min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+.pane-editor { border-right: 1px solid var(--border); background: var(--surface); }
+.workspace[data-mode="preview"] .pane-editor,
+.workspace[data-mode="source"] .pane-preview { display: none; }
+.pane-head {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  flex: 0 0 auto;
+}
+#editor {
+  flex: 1 1 auto;
+  width: 100%;
+  border: none;
+  resize: none;
+  padding: 20px 22px;
+  font-family: var(--mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: var(--ink);
+  background: var(--surface);
+  tab-size: 2;
+}
+#editor:focus { outline: none; }
+.preview-scroll { flex: 1 1 auto; overflow: auto; background: var(--bg); }
+.preview-wrap { display: flex; justify-content: center; padding: 40px 32px 96px; gap: 32px; }
+#toc {
+  position: sticky;
+  top: 0;
+  flex: 0 0 220px;
+  align-self: flex-start;
+  font-size: 13px;
+  border-left: 1px solid var(--border);
+  padding-left: 20px;
+}
+#toc.hidden { display: none; }
+#toc .toc-title {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+}
+#toc a {
+  display: block;
+  color: var(--muted);
+  text-decoration: none;
+  padding: 3px 0;
+  border-left: 2px solid transparent;
+  padding-left: 10px;
+  margin-left: -12px;
+  transition: color 0.12s ease, border-color 0.12s ease;
+}
+#toc a:hover { color: var(--ink); }
+#toc a.lvl-2 { padding-left: 22px; }
+#toc a.lvl-3 { padding-left: 34px; font-size: 12px; }
+#doc {
+  background: var(--surface);
+  color: var(--ink);
+  max-width: 760px;
+  width: 100%;
+  padding: 56px 60px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+  font-family: var(--serif);
+  font-size: 17px;
+  line-height: 1.72;
+}
+#doc.empty {
+  font-family: var(--ui);
+  color: var(--muted);
+  text-align: center;
+  padding: 90px 40px;
+}
+#doc.empty h2 { border: none; font-family: var(--mono); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-soft); }
+#doc h1, #doc h2, #doc h3, #doc h4, #doc h5, #doc h6 {
+  font-family: var(--ui);
+  line-height: 1.25;
+  color: var(--ink);
+  margin: 1.9em 0 0.6em;
+  scroll-margin-top: 24px;
+}
+#doc > :first-child { margin-top: 0; }
+#doc h1 { font-size: 1.95em; font-weight: 700; letter-spacing: -0.02em; }
+#doc h2 { font-size: 1.5em; font-weight: 650; padding-bottom: 0.3em; border-bottom: 1px solid var(--border); letter-spacing: -0.01em; }
+#doc h3 { font-size: 1.22em; font-weight: 650; }
+#doc h4 { font-size: 1.05em; font-weight: 650; color: var(--ink-soft); }
+#doc p { margin: 0 0 1.1em; }
+#doc a { color: var(--accent); text-decoration: none; border-bottom: 1px solid var(--accent-soft); }
+#doc a:hover { border-bottom-color: var(--accent); }
+#doc strong { font-weight: 700; }
+#doc ul, #doc ol { margin: 0 0 1.1em; padding-left: 1.5em; }
+#doc li { margin: 0.3em 0; }
+#doc li::marker { color: var(--muted); }
+#doc ul.contains-task-list { list-style: none; padding-left: 0.2em; }
+#doc .task-list-item { display: flex; align-items: flex-start; gap: 0.6em; }
+#doc .task-list-item input { margin-top: 0.55em; accent-color: var(--accent); }
+#doc blockquote {
+  margin: 1.3em 0;
+  padding: 0.4em 1.2em;
+  border-left: 3px solid var(--quote-bar);
+  color: var(--ink-soft);
+  font-style: italic;
+}
+#doc blockquote p:last-child { margin-bottom: 0; }
+#doc hr { border: none; border-top: 1px solid var(--border); margin: 2.4em 0; }
+#doc code {
+  font-family: var(--mono);
+  font-size: 0.86em;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 0.12em 0.4em;
+}
+#doc pre {
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  overflow: auto;
+  margin: 0 0 1.3em;
+  line-height: 1.55;
+}
+#doc pre code {
+  font-size: 13px;
+  background: none;
+  border: none;
+  padding: 0;
+}
+#doc img { max-width: 100%; border-radius: 8px; display: block; margin: 1.3em auto; }
+#doc table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1.4em;
+  font-family: var(--ui);
+  font-size: 0.92em;
+}
+#doc th, #doc td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; }
+#doc th { background: var(--surface-2); font-weight: 650; }
+#doc tr:nth-child(even) td { background: var(--surface-2); }
+.mermaid-figure {
+  margin: 0 0 1.4em;
+  padding: 20px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  text-align: center;
+  overflow: auto;
+}
+.mermaid-figure svg { max-width: 100%; height: auto; }
+.mermaid-error {
+  margin: 0 0 1.4em;
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  overflow: hidden;
+  font-family: var(--ui);
+}
+.mermaid-error .head {
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--danger);
+}
+.mermaid-error pre { margin: 0; border: none; border-radius: 0; background: var(--code-bg); }
+.dropzone {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(61, 99, 255, 0.12);
+  backdrop-filter: blur(2px);
+}
+.dropzone.active { display: flex; }
+.dropzone .card {
+  background: var(--surface);
+  border: 2px dashed var(--accent);
+  border-radius: 16px;
+  padding: 40px 56px;
+  font-family: var(--mono);
+  font-size: 14px;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+input[type="file"] { display: none; }
+@media (max-width: 820px) {
+  .workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: 1fr 1fr; }
+  .workspace[data-mode="split"] .pane-editor { border-right: none; border-bottom: 1px solid var(--border); }
+  .workspace[data-mode="preview"], .workspace[data-mode="source"] { grid-template-rows: 1fr; }
+  .workspace[data-mode="preview"] { grid-template-columns: minmax(0, 1fr); }
+  .preview-wrap { padding: 20px 14px 72px; }
+  #doc { padding: 32px 22px; border-radius: 10px; }
+  #toc { display: none; }
+  .hide-narrow { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; }
+}
+@media print {
+  .topbar, .pane-editor, .pane-head, #toc { display: none !important; }
+  body, .workspace, .pane-preview, .preview-scroll { display: block; overflow: visible; height: auto; }
+  .preview-wrap { padding: 0; }
+  #doc { border: none; box-shadow: none; max-width: none; padding: 0; }
+}
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="wordmark"><span class="dot"></span> MD&nbsp;·&nbsp;VIEWER</div>
+  <div class="group">
+    <label class="btn" for="file-input">Dosya aç</label>
+    <input id="file-input" type="file" accept=".md,.markdown,.txt,text/markdown,text/plain">
+    <button id="sample-btn" class="hide-narrow">Örnek yükle</button>
+    <button id="clear-btn" class="hide-narrow">Temizle</button>
+  </div>
+  <div class="spacer"></div>
+  <div class="segmented" role="group" aria-label="Görünüm modu">
+    <button data-mode="split" aria-pressed="true">Bölünmüş</button>
+    <button data-mode="preview" aria-pressed="false">Önizleme</button>
+    <button data-mode="source" aria-pressed="false">Kaynak</button>
+  </div>
+  <div class="group">
+    <button id="toc-btn" class="icon-btn hide-narrow" title="İçindekiler" aria-label="İçindekiler">≡</button>
+    <button id="print-btn" class="icon-btn" title="Yazdır / PDF" aria-label="Yazdır">⎙</button>
+    <button id="theme-btn" class="icon-btn" title="Tema" aria-label="Tema değiştir">◐</button>
+  </div>
+</header>
+
+<div class="workspace" data-mode="split">
+  <section class="pane pane-editor">
+    <div class="pane-head">Kaynak · Markdown</div>
+    <textarea id="editor" spellcheck="false" placeholder="Markdown yaz veya bir .md dosyası sürükle..."></textarea>
+  </section>
+  <section class="pane pane-preview">
+    <div class="pane-head">Önizleme</div>
+    <div class="preview-scroll">
+      <div class="preview-wrap">
+        <article id="doc" class="empty"></article>
+        <nav id="toc" class="hidden" aria-label="İçindekiler"></nav>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="dropzone" id="dropzone"><div class="card">Bırak → yükle</div></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/12.0.2/marked.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.0.11/purify.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/11.4.1/mermaid.min.js"></script>
+<script>
+(function () {
+  const editor = document.getElementById("editor");
+  const doc = document.getElementById("doc");
+  const toc = document.getElementById("toc");
+  const workspace = document.querySelector(".workspace");
+  const dropzone = document.getElementById("dropzone");
+  const hljsLight = document.getElementById("hljs-light");
+  const hljsDark = document.getElementById("hljs-dark");
+  let theme = "light";
+  let tocVisible = false;
+  let renderToken = 0;
+
+  marked.setOptions({ gfm: true, breaks: false, headerIds: false, mangle: false });
+
+  function slugify(text) {
+    return text.toLowerCase().trim()
+      .replace(/[çÇ]/g, "c").replace(/[ğĞ]/g, "g").replace(/[ıİ]/g, "i")
+      .replace(/[öÖ]/g, "o").replace(/[şŞ]/g, "s").replace(/[üÜ]/g, "u")
+      .replace(/[^\w\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+  }
+
+  function applyMermaidTheme() {
+    mermaid.initialize({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: theme === "dark" ? "dark" : "default",
+      fontFamily: getComputedStyle(document.documentElement).getPropertyValue("--ui")
+    });
+  }
+
+  function highlightCode() {
+    doc.querySelectorAll("pre code").forEach(function (block) {
+      hljs.highlightElement(block);
+    });
+  }
+
+  function extractMermaid() {
+    const blocks = [];
+    doc.querySelectorAll("pre > code").forEach(function (code) {
+      if (!code.className.split(" ").some(c => c === "language-mermaid")) return;
+      const pre = code.parentElement;
+      const holder = document.createElement("div");
+      holder.setAttribute("data-mermaid-src", "1");
+      holder.textContent = code.textContent;
+      holder.style.display = "none";
+      pre.replaceWith(holder);
+      blocks.push(holder);
+    });
+    return blocks;
+  }
+
+  async function renderMermaid(blocks, token) {
+    for (let i = 0; i < blocks.length; i++) {
+      if (token !== renderToken) return;
+      const holder = blocks[i];
+      const src = holder.textContent;
+      const id = "mmd-" + token + "-" + i;
+      try {
+        const out = await mermaid.render(id, src);
+        const figure = document.createElement("div");
+        figure.className = "mermaid-figure";
+        figure.innerHTML = out.svg;
+        holder.replaceWith(figure);
+      } catch (err) {
+        const box = document.createElement("div");
+        box.className = "mermaid-error";
+        const head = document.createElement("div");
+        head.className = "head";
+        head.textContent = "Mermaid render hatası — " + (err && err.message ? err.message.split("\n")[0] : String(err));
+        const pre = document.createElement("pre");
+        const codeEl = document.createElement("code");
+        codeEl.textContent = src;
+        pre.appendChild(codeEl);
+        box.appendChild(head);
+        box.appendChild(pre);
+        holder.replaceWith(box);
+        const stray = document.getElementById("d" + id) || document.getElementById(id);
+        if (stray && stray.parentElement) stray.parentElement.removeChild(stray);
+      }
+    }
+  }
+
+  function buildToc() {
+    const headings = doc.querySelectorAll("h1, h2, h3");
+    if (headings.length < 2) {
+      toc.classList.add("hidden");
+      toc.innerHTML = "";
+      return;
+    }
+    const used = {};
+    let html = '<div class="toc-title">İçindekiler</div>';
+    headings.forEach(function (h) {
+      let id = slugify(h.textContent) || "baslik";
+      if (used[id]) { used[id]++; id = id + "-" + used[id]; } else { used[id] = 1; }
+      h.id = id;
+      const lvl = h.tagName === "H1" ? 1 : h.tagName === "H2" ? 2 : 3;
+      html += '<a class="lvl-' + lvl + '" href="#' + id + '">' + h.textContent + "</a>";
+    });
+    toc.innerHTML = html;
+    toc.querySelectorAll("a").forEach(function (a) {
+      a.addEventListener("click", function (e) {
+        e.preventDefault();
+        const target = document.getElementById(a.getAttribute("href").slice(1));
+        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    });
+    if (tocVisible) toc.classList.remove("hidden");
+  }
+
+  function showEmpty() {
+    doc.classList.add("empty");
+    doc.innerHTML =
+      "<h2>Boş</h2><p>Bir <code>.md</code> dosyası aç ya da sürükleyip bırak.<br>" +
+      "Sağdaki editöre yazdıkça anında render edilir. Mermaid blokları diyagrama dönüşür.</p>";
+    toc.classList.add("hidden");
+    toc.innerHTML = "";
+  }
+
+  async function render() {
+    const md = editor.value;
+    const token = ++renderToken;
+    if (!md.trim()) { showEmpty(); return; }
+    doc.classList.remove("empty");
+    applyMermaidTheme();
+    const raw = marked.parse(md);
+    const clean = DOMPurify.sanitize(raw, {
+      ADD_ATTR: ["class", "id", "align", "target", "rel"],
+      ADD_TAGS: ["input"]
+    });
+    doc.innerHTML = clean;
+    const mermaidBlocks = extractMermaid();
+    highlightCode();
+    buildToc();
+    doc.querySelectorAll('a[href^="http"]').forEach(function (a) {
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+    });
+    await renderMermaid(mermaidBlocks, token);
+  }
+
+  let debounce;
+  editor.addEventListener("input", function () {
+    clearTimeout(debounce);
+    debounce = setTimeout(render, 250);
+  });
+
+  document.querySelectorAll(".segmented button").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      document.querySelectorAll(".segmented button").forEach(function (b) {
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false");
+      });
+      workspace.setAttribute("data-mode", btn.getAttribute("data-mode"));
+    });
+  });
+
+  document.getElementById("theme-btn").addEventListener("click", function () {
+    theme = theme === "light" ? "dark" : "light";
+    document.documentElement.setAttribute("data-theme", theme);
+    hljsLight.disabled = theme === "dark";
+    hljsDark.disabled = theme === "light";
+    render();
+  });
+
+  document.getElementById("toc-btn").addEventListener("click", function () {
+    tocVisible = !tocVisible;
+    if (tocVisible && toc.innerHTML) toc.classList.remove("hidden");
+    else toc.classList.add("hidden");
+  });
+
+  document.getElementById("print-btn").addEventListener("click", function () {
+    window.print();
+  });
+
+  document.getElementById("clear-btn").addEventListener("click", function () {
+    editor.value = "";
+    render();
+    editor.focus();
+  });
+
+  function loadFile(file) {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function (e) {
+      editor.value = e.target.result;
+      render();
+    };
+    reader.readAsText(file);
+  }
+
+  document.getElementById("file-input").addEventListener("change", function (e) {
+    loadFile(e.target.files[0]);
+    e.target.value = "";
+  });
+
+  let dragDepth = 0;
+  window.addEventListener("dragenter", function (e) {
+    e.preventDefault();
+    dragDepth++;
+    dropzone.classList.add("active");
+  });
+  window.addEventListener("dragover", function (e) { e.preventDefault(); });
+  window.addEventListener("dragleave", function (e) {
+    e.preventDefault();
+    dragDepth--;
+    if (dragDepth <= 0) { dragDepth = 0; dropzone.classList.remove("active"); }
+  });
+  window.addEventListener("drop", function (e) {
+    e.preventDefault();
+    dragDepth = 0;
+    dropzone.classList.remove("active");
+    if (e.dataTransfer.files && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+  });
+
+  const SAMPLE = [
+    "# Rezervasyon Akisi — Teknik Not",
+    "",
+    "Rider ve Driver iOS tarafinda es zamanli calisan **rezervasyon** ozelliginin ust seviye akisi.",
+    "GFM tablolari, gorev listesi, kod ve Mermaid diyagramlari asagida.",
+    "",
+    "## Durum Makinesi",
+    "",
+    "```mermaid",
+    "stateDiagram-v2",
+    "    [*] --> Draft",
+    "    Draft --> Requested: kullanici onaylar",
+    "    Requested --> Matched: surucu atanir",
+    "    Matched --> Ongoing: yolculuk baslar",
+    "    Ongoing --> Completed",
+    "    Requested --> Cancelled: zaman asimi",
+    "    Completed --> [*]",
+    "    Cancelled --> [*]",
+    "```",
+    "",
+    "## Servis Iletisimi",
+    "",
+    "```mermaid",
+    "sequenceDiagram",
+    "    participant R as Rider App",
+    "    participant B as Backend",
+    "    participant D as Driver App",
+    "    R->>B: POST /reservations",
+    "    B-->>R: 201 reservationId",
+    "    B->>D: push (yeni istek)",
+    "    D->>B: PATCH accept",
+    "    B-->>R: status = Matched",
+    "```",
+    "",
+    "## Kapsam",
+    "",
+    "| Katman | Sahip | Durum |",
+    "| --- | --- | --- |",
+    "| Rider iOS | Hakan | Tamam |",
+    "| Driver iOS | Hakan | Tamam |",
+    "| Backend | Muharrem | Devam |",
+    "| Android | Ekip | Planli |",
+    "",
+    "## Yapilacaklar",
+    "",
+    "- [x] Durum makinesi tasarimi",
+    "- [x] Rider tarafi UI",
+    "- [ ] Driver push entegrasyonu",
+    "- [ ] Uctan uca test",
+    "",
+    "## Ornek Kod",
+    "",
+    "```swift",
+    "enum ReservationState: Equatable {",
+    "    case draft, requested, matched, ongoing, completed, cancelled",
+    "}",
+    "",
+    "func amount(_ raw: Double) -> Double {",
+    "    (raw * 100).rounded() / 100",
+    "}",
+    "```",
+    "",
+    "> Not: para aritmetiginde `Double` yerine yuvarlama sart; IEEE 754 kirpma hatasi olusur.",
+    "",
+    "Detayli referans: [Apple iOS](https://developer.apple.com/ios/) ve [Swift by Sundell](https://www.swiftbysundell.com)."
+  ].join("\n");
+
+  document.getElementById("sample-btn").addEventListener("click", function () {
+    editor.value = SAMPLE;
+    tocVisible = true;
+    render();
+  });
+
+  showEmpty();
+})();
+</script>
+</body>
+</html>
